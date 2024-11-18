@@ -27,6 +27,11 @@ interface Coin {
   value: number;
 }
 
+interface CacheMemento {
+  location: leaflet.LatLng;
+  coins: Coin[];
+}
+
 const map = leaflet.map(document.getElementById("map")!, {
   center: OAKES_CLASSROOM,
   zoom: GAMEPLAY_ZOOM_LEVEL,
@@ -48,6 +53,7 @@ const player: Player = {
 };
 
 const caches: Cache[] = [];
+const cacheMementos: { [key: string]: CacheMemento } = {};
 
 function latLngToCell(latLng: leaflet.LatLng): { i: number; j: number } {
   return {
@@ -61,16 +67,34 @@ function formatCoinId(coin: Coin): string {
 }
 
 function generateCaches() {
+  caches.forEach((cache) => cache.marker.remove());
+  caches.length = 0;
+
   for (let i = -NEIGHBORHOOD_SIZE; i <= NEIGHBORHOOD_SIZE; i++) {
     for (let j = -NEIGHBORHOOD_SIZE; j <= NEIGHBORHOOD_SIZE; j++) {
-      if (luck(`cache-spawn-${i}-${j}`) < CACHE_SPAWN_PROBABILITY) {
-        const cacheLocation = leaflet.latLng(
-          OAKES_CLASSROOM.lat + i * TILE_DEGREES,
-          OAKES_CLASSROOM.lng + j * TILE_DEGREES,
-        );
-        const cell = latLngToCell(cacheLocation);
+      const cacheLocation = leaflet.latLng(
+        player.location.lat + i * TILE_DEGREES,
+        player.location.lng + j * TILE_DEGREES,
+      );
+      const cell = latLngToCell(cacheLocation);
+      const cacheKey = `${cell.i}:${cell.j}`;
+
+      if (cacheMementos[cacheKey]) {
+        const memento = cacheMementos[cacheKey];
+        const cache: Cache = {
+          location: memento.location,
+          coins: memento.coins,
+          marker: createCacheMarker(memento.location),
+        };
+        caches.push(cache);
+        updateCachePopup(cache);
+      } else if (
+        luck(`cache-spawn-${cell.i}-${cell.j}`) < CACHE_SPAWN_PROBABILITY
+      ) {
         const coins: Coin[] = [];
-        const numCoins = Math.floor(luck(`cache-coins-${i}-${j}`) * 10) + 1;
+        const numCoins = Math.floor(
+          luck(`cache-coins-${cell.i}-${cell.j}`) * 10,
+        ) + 1;
         for (let k = 0; k < numCoins; k++) {
           coins.push({ id: { i: cell.i, j: cell.j, serial: k }, value: 1 });
         }
@@ -81,6 +105,7 @@ function generateCaches() {
         };
         caches.push(cache);
         updateCachePopup(cache);
+        cacheMementos[cacheKey] = { location: cacheLocation, coins: coins };
       }
     }
   }
@@ -110,6 +135,7 @@ function collectCoins(lat: number, lng: number) {
     player.coins.push(...cache.coins);
     cache.coins = [];
     updateCachePopup(cache);
+    saveCacheState(cache);
   }
 }
 
@@ -121,7 +147,17 @@ function depositCoins(lat: number, lng: number) {
     cache.coins.push(...player.coins);
     player.coins = [];
     updateCachePopup(cache);
+    saveCacheState(cache);
   }
+}
+
+function saveCacheState(cache: Cache) {
+  const cell = latLngToCell(cache.location);
+  const cacheKey = `${cell.i}:${cell.j}`;
+  cacheMementos[cacheKey] = {
+    location: cache.location,
+    coins: [...cache.coins],
+  };
 }
 
 document.addEventListener("click", function (event) {
@@ -136,5 +172,31 @@ document.addEventListener("click", function (event) {
     depositCoins(lat, lng);
   }
 });
+
+document.getElementById("north")!.addEventListener(
+  "click",
+  () => movePlayer(TILE_DEGREES, 0),
+);
+document.getElementById("south")!.addEventListener(
+  "click",
+  () => movePlayer(-TILE_DEGREES, 0),
+);
+document.getElementById("west")!.addEventListener(
+  "click",
+  () => movePlayer(0, -TILE_DEGREES),
+);
+document.getElementById("east")!.addEventListener(
+  "click",
+  () => movePlayer(0, TILE_DEGREES),
+);
+
+function movePlayer(latOffset: number, lngOffset: number) {
+  player.location = leaflet.latLng(
+    player.location.lat + latOffset,
+    player.location.lng + lngOffset,
+  );
+  map.setView(player.location);
+  generateCaches();
+}
 
 generateCaches();
