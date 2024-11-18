@@ -13,16 +13,17 @@ const CACHE_SPAWN_PROBABILITY = 0.1;
 
 interface Player {
   location: leaflet.LatLng;
-  coins: number;
+  coins: Coin[];
 }
 
 interface Cache {
   location: leaflet.LatLng;
-  coins: number;
+  coins: Coin[];
   marker: leaflet.Marker;
 }
 
 interface Coin {
+  id: { i: number; j: number; serial: number };
   value: number;
 }
 
@@ -43,10 +44,21 @@ leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 const player: Player = {
   location: OAKES_CLASSROOM,
-  coins: 0,
+  coins: [],
 };
 
 const caches: Cache[] = [];
+
+function latLngToCell(latLng: leaflet.LatLng): { i: number; j: number } {
+  return {
+    i: Math.floor(latLng.lat / TILE_DEGREES),
+    j: Math.floor(latLng.lng / TILE_DEGREES),
+  };
+}
+
+function formatCoinId(coin: Coin): string {
+  return `${coin.id.i}:${coin.id.j}#${coin.id.serial}`;
+}
 
 function generateCaches() {
   for (let i = -NEIGHBORHOOD_SIZE; i <= NEIGHBORHOOD_SIZE; i++) {
@@ -56,9 +68,15 @@ function generateCaches() {
           OAKES_CLASSROOM.lat + i * TILE_DEGREES,
           OAKES_CLASSROOM.lng + j * TILE_DEGREES,
         );
+        const cell = latLngToCell(cacheLocation);
+        const coins: Coin[] = [];
+        const numCoins = Math.floor(luck(`cache-coins-${i}-${j}`) * 10) + 1;
+        for (let k = 0; k < numCoins; k++) {
+          coins.push({ id: { i: cell.i, j: cell.j, serial: k }, value: 1 });
+        }
         const cache: Cache = {
           location: cacheLocation,
-          coins: Math.floor(luck(`cache-coins-${i}-${j}`) * 10) + 1,
+          coins: coins,
           marker: createCacheMarker(cacheLocation),
         };
         caches.push(cache);
@@ -73,9 +91,11 @@ function createCacheMarker(location: leaflet.LatLng): leaflet.Marker {
 }
 
 function updateCachePopup(cache: Cache) {
+  const coinIds = cache.coins.map(formatCoinId).join(", ");
   cache.marker.bindPopup(`
     <div>
-      <p>Coins: ${cache.coins}</p>
+      <p>Coins: ${cache.coins.length}</p>
+      <p>Coin IDs: ${coinIds}</p>
       <button class="collect" data-lat="${cache.location.lat}" data-lng="${cache.location.lng}">Collect</button>
       <button class="deposit" data-lat="${cache.location.lat}" data-lng="${cache.location.lng}">Deposit</button>
     </div>
@@ -86,9 +106,9 @@ function collectCoins(lat: number, lng: number) {
   const cache = caches.find((c) =>
     c.location.lat === lat && c.location.lng === lng
   );
-  if (cache && cache.coins > 0) {
-    player.coins += cache.coins;
-    cache.coins = 0;
+  if (cache && cache.coins.length > 0) {
+    player.coins.push(...cache.coins);
+    cache.coins = [];
     updateCachePopup(cache);
   }
 }
@@ -98,8 +118,8 @@ function depositCoins(lat: number, lng: number) {
     c.location.lat === lat && c.location.lng === lng
   );
   if (cache) {
-    cache.coins += player.coins;
-    player.coins = 0;
+    cache.coins.push(...player.coins);
+    player.coins = [];
     updateCachePopup(cache);
   }
 }
