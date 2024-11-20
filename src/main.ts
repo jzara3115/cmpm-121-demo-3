@@ -70,15 +70,16 @@ function formatCoinId(coin: Coin): string {
   return `${coin.id.i}:${coin.id.j}#${coin.id.serial}`;
 }
 
-function generateCoinCanvas(_coin: Coin): HTMLCanvasElement {
+function generateCoinCanvas(coin: Coin): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = 50;
   canvas.height = 50;
   const ctx = canvas.getContext("2d")!;
-  ctx.font = "20px Arial";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("🟡", canvas.width / 2, canvas.height / 2);
+  const hue = (coin.id.serial * 137.5) % 360; // Use serial number to determine color
+  ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+  ctx.beginPath();
+  ctx.arc(25, 25, 20, 0, 2 * Math.PI);
+  ctx.fill();
   return canvas;
 }
 
