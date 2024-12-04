@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 import "./style.css";
 import "./leafletWorkaround.ts";
 import luck from "./luck.ts";
+import { CacheUIManager } from "./CacheUIManager.ts";
 
 const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
 const GAMEPLAY_ZOOM_LEVEL = 19;
@@ -11,24 +12,24 @@ const TILE_DEGREES = 0.0001;
 const NEIGHBORHOOD_SIZE = 8;
 const CACHE_SPAWN_PROBABILITY = 0.1;
 
-interface Player {
+export interface Player {
   location: leaflet.LatLng;
   coins: Coin[];
   history: leaflet.LatLng[];
 }
 
-interface Cache {
+export interface Cache {
   location: leaflet.LatLng;
   coins: Coin[];
   marker: leaflet.Marker;
 }
 
-interface Coin {
+export interface Coin {
   id: { i: number; j: number; serial: number };
   value: number;
 }
 
-interface CacheMemento {
+export interface CacheMemento {
   location: leaflet.LatLng;
   coins: Coin[];
 }
@@ -66,23 +67,6 @@ function latLngToCell(latLng: leaflet.LatLng): { i: number; j: number } {
   };
 }
 
-function formatCoinId(coin: Coin): string {
-  return `${coin.id.i}:${coin.id.j}#${coin.id.serial}`;
-}
-
-function generateCoinCanvas(coin: Coin): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = 50;
-  canvas.height = 50;
-  const ctx = canvas.getContext("2d")!;
-  const hue = (coin.id.serial * 137.5) % 360; // Use serial number to determine color
-  ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
-  ctx.beginPath();
-  ctx.arc(25, 25, 20, 0, 2 * Math.PI);
-  ctx.fill();
-  return canvas;
-}
-
 function generateCaches() {
   caches.forEach((cache) => cache.marker.remove());
   caches.length = 0;
@@ -104,7 +88,7 @@ function generateCaches() {
           marker: createCacheMarker(memento.location),
         };
         caches.push(cache);
-        updateCachePopup(cache);
+        CacheUIManager.setPopup(cache);
       } else if (
         luck(`cache-spawn-${cell.i}-${cell.j}`) < CACHE_SPAWN_PROBABILITY
       ) {
@@ -120,7 +104,7 @@ function generateCaches() {
           marker: createCacheMarker(cacheLocation),
         };
         caches.push(cache);
-        updateCachePopup(cache);
+        CacheUIManager.setPopup(cache);
         cacheMementos[cacheKey] = { location: cacheLocation, coins: coins };
       }
     }
@@ -131,38 +115,6 @@ function createCacheMarker(location: leaflet.LatLng): leaflet.Marker {
   return leaflet.marker(location).addTo(map);
 }
 
-function updateCachePopup(cache: Cache) {
-  const popupContent = document.createElement("div");
-  const coinCount = document.createElement("p");
-  coinCount.textContent = `Coins: ${cache.coins.length}`;
-  popupContent.appendChild(coinCount);
-
-  const coinIds = document.createElement("p");
-  cache.coins.forEach((coin) => {
-    const coinCanvas = generateCoinCanvas(coin);
-    coinCanvas.classList.add("coin-id");
-    coinCanvas.dataset.id = formatCoinId(coin);
-    coinIds.appendChild(coinCanvas);
-  });
-  popupContent.appendChild(coinIds);
-
-  const collectButton = document.createElement("button");
-  collectButton.classList.add("collect");
-  collectButton.dataset.lat = cache.location.lat.toString();
-  collectButton.dataset.lng = cache.location.lng.toString();
-  collectButton.textContent = "Collect";
-  popupContent.appendChild(collectButton);
-
-  const depositButton = document.createElement("button");
-  depositButton.classList.add("deposit");
-  depositButton.dataset.lat = cache.location.lat.toString();
-  depositButton.dataset.lng = cache.location.lng.toString();
-  depositButton.textContent = "Deposit";
-  popupContent.appendChild(depositButton);
-
-  cache.marker.bindPopup(popupContent);
-}
-
 function collectCoins(lat: number, lng: number) {
   const cache = caches.find((c) =>
     c.location.lat === lat && c.location.lng === lng
@@ -170,7 +122,7 @@ function collectCoins(lat: number, lng: number) {
   if (cache && cache.coins.length > 0) {
     player.coins.push(...cache.coins);
     cache.coins = [];
-    updateCachePopup(cache);
+    CacheUIManager.setPopup(cache);
     saveCacheState(cache);
   }
 }
@@ -182,7 +134,7 @@ function depositCoins(lat: number, lng: number) {
   if (cache) {
     cache.coins.push(...player.coins);
     player.coins = [];
-    updateCachePopup(cache);
+    CacheUIManager.setPopup(cache);
     saveCacheState(cache);
   }
 }
